@@ -1,0 +1,1504 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="RucherMap">
+<meta name="theme-color" content="#f5a623">
+<title>🐝 RucherMap</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+:root {
+  --gold:#f5a623; --gold-dark:#c97d0a; --bg:#1a1a2e; --panel:#16213e;
+  --border:#0f3460; --text:#e8eaf6; --muted:#8892b0;
+  --green:#4ade80; --red:#f87171; --orange:#fb923c; --purple:#a78bfa;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --header-h: 56px;
+  --tab-h: 56px;
+  --bottom-nav-h: calc(60px + var(--safe-bottom));
+}
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html, body { height:100%; overflow:hidden; overscroll-behavior:none; }
+body {
+  font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
+  background:var(--bg); color:var(--text);
+  display:flex; flex-direction:column;
+}
+
+/* ─── HEADER ─────────────────────────────────────────────── */
+.header {
+  background:linear-gradient(135deg,var(--gold),var(--gold-dark));
+  padding: calc(var(--safe-top) + 10px) 14px 10px;
+  display:flex; align-items:center; justify-content:space-between;
+  flex-shrink:0; z-index:200;
+  box-shadow:0 2px 12px rgba(0,0,0,.4);
+}
+.header-left { display:flex; align-items:center; gap:9px; }
+.logo { font-size:24px; }
+.app-title { font-size:14px; font-weight:700; color:#3d1f00; line-height:1.2; }
+.app-sub { font-size:10px; color:#6b3a0a; }
+.header-right { display:flex; align-items:center; gap:6px; }
+.hbtn {
+  background:rgba(0,0,0,.2); border:none; border-radius:10px;
+  padding:7px 11px; font-size:11px; font-weight:700; color:#3d1f00;
+  cursor:pointer; white-space:nowrap;
+}
+.hbtn:active { background:rgba(0,0,0,.35); }
+.stat-mini { background:rgba(0,0,0,.15); border-radius:8px; padding:5px 9px; font-size:10px; font-weight:700; color:#3d1f00; }
+
+/* ─── LAYOUT ─────────────────────────────────────────────── */
+.main { display:flex; flex:1; overflow:hidden; }
+
+/* Desktop sidebar */
+.sidebar {
+  width:270px; background:var(--panel); border-right:1px solid var(--border);
+  display:flex; flex-direction:column; overflow:hidden; flex-shrink:0;
+  z-index:100;
+}
+@media (max-width:700px) {
+  .sidebar { display:none; }
+}
+
+/* ─── MAP ─────────────────────────────────────────────────── */
+.map-wrap { flex:1; position:relative; z-index:1; }
+#map { width:100%; height:100%; }
+
+/* ─── MOBILE BOTTOM SHEET ─────────────────────────────────── */
+.bottom-sheet {
+  display:none;
+  position:fixed; left:0; right:0; bottom:var(--bottom-nav-h); z-index:300;
+  background:var(--panel);
+  border-radius:18px 18px 0 0;
+  box-shadow:0 -4px 30px rgba(0,0,0,.5);
+  height:calc(100vh - var(--bottom-nav-h));
+  transform:translateY(100%);
+  transition:transform .35s cubic-bezier(.4,0,.2,1);
+  overflow:hidden;
+  flex-direction:column;
+}
+/* Deux positions : bas (peek ~20%) et milieu (50%) */
+.bottom-sheet.snap-bottom { transform:translateY(78%); }
+.bottom-sheet.snap-mid    { transform:translateY(48%); }
+.bottom-sheet.open        { transform:translateY(48%); }
+@media (max-width:700px) { .bottom-sheet { display:flex; } }
+.sheet-handle-wrap {
+  display:flex; align-items:center; justify-content:center;
+  padding:8px 14px 4px; flex-shrink:0;
+  position:relative;
+}
+.sheet-handle {
+  width:38px; height:4px; background:rgba(255,255,255,.2);
+  border-radius:2px; flex-shrink:0; cursor:pointer;
+}
+.sheet-close-btn {
+  position:absolute; right:14px; top:50%; transform:translateY(-50%);
+  background:rgba(255,255,255,.08); border:none; border-radius:50%;
+  color:var(--muted); font-size:16px; cursor:pointer;
+  width:32px; height:32px; display:flex; align-items:center; justify-content:center;
+  line-height:1;
+}
+.sheet-close-btn:active { background:rgba(255,255,255,.2); }
+.sheet-toggle-btn {
+  position:absolute; left:14px; top:50%; transform:translateY(-50%);
+  background:rgba(255,255,255,.08); border:none; border-radius:8px;
+  color:var(--muted); font-size:13px; cursor:pointer;
+  padding:4px 8px; height:28px; display:flex; align-items:center; justify-content:center;
+  font-weight:700;
+}
+.sheet-toggle-btn:active { background:rgba(255,255,255,.18); }
+.sheet-content { overflow-y:auto; flex:1; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; }
+
+/* ─── MOBILE BOTTOM NAV ───────────────────────────────────── */
+.bottom-nav {
+  display:none;
+  position:fixed; bottom:0; left:0; right:0; z-index:400;
+  background:rgba(22,33,62,.97); backdrop-filter:blur(16px);
+  border-top:1px solid var(--border);
+  padding-bottom:var(--safe-bottom);
+  flex-direction:row;
+}
+@media (max-width:700px) { .bottom-nav { display:flex; } }
+.bnav-btn {
+  flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  padding:8px 4px; border:none; background:transparent; color:var(--muted);
+  cursor:pointer; font-size:10px; font-weight:600; gap:3px; min-height:56px;
+  transition:color .2s;
+}
+.bnav-btn .icon { font-size:20px; }
+.bnav-btn.active { color:var(--gold); }
+.bnav-btn:active { opacity:.7; }
+
+/* ─── TABS (desktop) ──────────────────────────────────────── */
+.tabs { display:flex; background:var(--border); flex-shrink:0; }
+@media (max-width:700px) { .tabs { display:none; } }
+.tab { flex:1; padding:9px; font-size:11px; font-weight:700; text-align:center; cursor:pointer; border:none; background:transparent; color:var(--muted); transition:all .2s; }
+.tab.active { background:var(--panel); color:var(--gold); border-bottom:2px solid var(--gold); }
+
+/* ─── SIDEBAR / PANEL COMMUNS ────────────────────────────── */
+.panel-header {
+  padding:10px 14px; background:var(--border);
+  font-size:10px; font-weight:700; color:var(--gold);
+  text-transform:uppercase; letter-spacing:1px;
+  display:flex; align-items:center; justify-content:space-between;
+  flex-shrink:0;
+}
+.panel-count { background:var(--gold); color:#3d1f00; border-radius:10px; padding:1px 7px; font-size:10px; }
+
+/* FILTERS */
+.filters { padding:10px 14px; border-bottom:1px solid var(--border); flex-shrink:0; }
+.filter-label { font-size:9px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px; }
+.filter-row { display:flex; gap:5px; flex-wrap:wrap; }
+.fbtn { padding:5px 10px; border-radius:12px; border:none; cursor:pointer; font-size:11px; font-weight:700; transition:opacity .2s; }
+.fbtn.off { opacity:.3; }
+.fbtn-gps { background:#4ade80; color:#0a2a00; }
+.fbtn-nogps { background:#f87171; color:#2a0000; }
+
+/* LIST */
+.emp-list { overflow-y:auto; flex:1; -webkit-overflow-scrolling:touch; }
+.emp-list::-webkit-scrollbar { width:4px; }
+.emp-list::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+.emp-item {
+  padding:11px 14px; border-bottom:1px solid rgba(15,52,96,.5);
+  cursor:pointer; border-left:3px solid transparent; transition:background .15s;
+  min-height:60px; /* touch target */
+}
+.emp-item:active, .emp-item:hover { background:rgba(15,52,96,.6); }
+.emp-item.selected { background:rgba(245,166,35,.1); border-left-color:var(--gold); }
+.emp-item.in-route { border-left-color:var(--purple); background:rgba(167,139,250,.06); }
+.emp-name { font-size:13px; font-weight:600; color:var(--text); }
+.emp-addr { font-size:10px; color:var(--muted); margin-top:2px; }
+.emp-badges { display:flex; gap:4px; margin-top:5px; flex-wrap:wrap; }
+.badge { font-size:9px; font-weight:700; padding:2px 7px; border-radius:8px; }
+.badge-gps { background:rgba(74,222,128,.2); color:#4ade80; border:1px solid rgba(74,222,128,.3); }
+.badge-culture { background:rgba(245,166,35,.15); color:var(--gold); border:1px solid rgba(245,166,35,.2); }
+.badge-route { background:rgba(167,139,250,.2); color:var(--purple); border:1px solid rgba(167,139,250,.3); }
+.badge-nogps { background:rgba(248,113,113,.2); color:#f87171; border:1px solid rgba(248,113,113,.3); }
+
+/* NOGPS section */
+.nogps-section { padding:10px 14px; border-top:1px solid var(--border); background:rgba(248,113,113,.04); flex-shrink:0; }
+.nogps-title { font-size:9px; color:#f87171; text-transform:uppercase; font-weight:700; margin-bottom:5px; }
+.nogps-list { font-size:11px; color:var(--muted); }
+.nogps-list li { list-style:none; padding:2px 0; display:flex; align-items:center; gap:5px; }
+.nogps-list li::before { content:'⚠️'; font-size:9px; }
+
+/* ─── INFO POPUP (map overlay) ───────────────────────────── */
+.info-panel {
+  position:absolute; bottom:20px; right:14px;
+  background:rgba(22,33,62,.97); border:1px solid var(--border);
+  border-radius:14px; padding:14px 16px; min-width:220px; max-width:268px;
+  z-index:999; display:none; backdrop-filter:blur(8px);
+  box-shadow:0 8px 32px rgba(0,0,0,.5);
+}
+.info-panel.open { display:block; animation:slideUp .2s ease; }
+@keyframes slideUp { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+@media (max-width:700px) {
+  .info-panel { display:none !important; } /* on mobile, uses bottom sheet */
+}
+.info-close { position:absolute; top:10px; right:12px; cursor:pointer; color:var(--muted); font-size:16px; width:28px; height:28px; display:flex; align-items:center; justify-content:center; }
+.info-title { font-size:14px; font-weight:700; color:var(--gold); margin-bottom:10px; padding-right:20px; }
+.info-row { display:flex; gap:8px; margin:5px 0; font-size:11px; align-items:flex-start; }
+.info-key { color:var(--muted); min-width:68px; flex-shrink:0; }
+.info-val { color:var(--text); font-weight:500; flex:1; }
+.info-sep { border:none; border-top:1px solid var(--border); margin:8px 0; }
+
+/* ─── ACTION BUTTONS ─────────────────────────────────────── */
+.action-btn {
+  display:flex; align-items:center; justify-content:center; gap:6px;
+  width:100%; padding:11px; border-radius:10px; border:none;
+  font-size:12px; font-weight:700; cursor:pointer; margin-top:7px;
+  text-decoration:none; transition:opacity .2s; min-height:44px;
+}
+.action-btn:active { opacity:.75; }
+.btn-gmaps { background:linear-gradient(135deg,#00b0ff,#0066cc); color:#fff; }
+.btn-waze  { background:linear-gradient(135deg,#33ccff,#006699); color:#fff; }
+.btn-notion { background:rgba(255,255,255,.08); color:var(--text); }
+.btn-addstop { background:linear-gradient(135deg,var(--purple),#7c3aed); color:#fff; }
+
+/* ─── LEGEND ─────────────────────────────────────────────── */
+.legend {
+  position:absolute; bottom:20px; left:14px;
+  background:rgba(22,33,62,.94); border:1px solid var(--border);
+  border-radius:10px; padding:9px 12px; z-index:999; font-size:10px;
+}
+@media (max-width:700px) { .legend { bottom:80px; } }
+.legend-title { color:var(--gold); font-weight:700; margin-bottom:5px; }
+.legend-item { display:flex; align-items:center; gap:6px; margin:3px 0; color:var(--muted); }
+.ldot { width:11px; height:11px; border-radius:50%; flex-shrink:0; border:2px solid rgba(255,255,255,.3); }
+
+/* ─── ROUTE HINT ─────────────────────────────────────────── */
+.route-hint {
+  position:absolute; top:12px; left:50%; transform:translateX(-50%);
+  background:rgba(167,139,250,.95); color:#fff; padding:7px 16px;
+  border-radius:20px; font-size:11px; font-weight:700; z-index:999;
+  pointer-events:none; white-space:nowrap; display:none;
+  box-shadow:0 3px 10px rgba(0,0,0,.3);
+}
+.route-hint.visible { display:block; }
+
+/* ─── LOADING ─────────────────────────────────────────────── */
+.loading-overlay {
+  position:absolute; inset:0; background:rgba(26,26,46,.88);
+  display:none; flex-direction:column; align-items:center; justify-content:center;
+  z-index:9999; gap:12px;
+}
+.loading-overlay.active { display:flex; }
+.spinner { width:38px; height:38px; border:3px solid rgba(245,166,35,.2); border-top-color:var(--gold); border-radius:50%; animation:spin .8s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+.loading-text { color:var(--gold); font-size:13px; font-weight:600; }
+
+/* ─── ITINERARY PANEL ────────────────────────────────────── */
+.itin-wrap { display:flex; flex-direction:column; height:100%; overflow:hidden; }
+/* Sur mobile, tout le contenu de l'itinéraire scrolle dans sheet-content */
+#mobItinPanel { display:flex; flex-direction:column; min-height:0; }
+#mobItinWrap { display:flex; flex-direction:column; min-height:0; }
+#mobItinWrap .itin-wrap { height:auto; overflow:visible; min-height:0; }
+#mobItinWrap .itin-editor { overflow:visible; flex:none; min-height:0; }
+#mobItinWrap .stops-container { overflow:visible; flex:none; min-height:0; }
+#mobItinWrap .itin-actions { padding-bottom:32px; }
+.itin-saved-header {
+  padding:9px 14px; font-size:10px; font-weight:700; color:var(--muted);
+  text-transform:uppercase; letter-spacing:.5px;
+  display:flex; align-items:center; justify-content:space-between;
+  background:var(--border); flex-shrink:0;
+}
+.new-itin-btn { background:var(--gold); color:#3d1f00; border:none; border-radius:8px; padding:5px 11px; font-size:11px; font-weight:700; cursor:pointer; min-height:32px; }
+.saved-list { max-height:120px; overflow-y:auto; border-bottom:1px solid var(--border); flex-shrink:0; }
+.saved-item {
+  padding:10px 14px; font-size:12px; cursor:pointer;
+  border-bottom:1px solid rgba(15,52,96,.3);
+  display:flex; align-items:center; gap:6px; transition:background .15s; min-height:48px;
+}
+.saved-item:active { background:rgba(15,52,96,.5); }
+.saved-item.active-itin { background:rgba(167,139,250,.1); border-left:3px solid var(--purple); }
+.saved-item-name { font-weight:600; color:var(--text); flex:1; }
+.saved-item-meta { font-size:10px; color:var(--muted); }
+.del-btn { background:none; border:none; color:var(--muted); cursor:pointer; font-size:16px; padding:4px 6px; min-width:32px; min-height:32px; display:flex; align-items:center; justify-content:center; }
+.del-btn:active { color:var(--red); }
+.itin-editor { flex:1; overflow-y:auto; display:flex; flex-direction:column; -webkit-overflow-scrolling:touch; }
+.itin-editor-header { padding:11px 14px; border-bottom:1px solid var(--border); flex-shrink:0; }
+.itin-name-input {
+  width:100%; background:rgba(255,255,255,.07); border:1px solid var(--border);
+  border-radius:8px; padding:9px 10px; font-size:14px; color:var(--text); outline:none;
+}
+.itin-name-input:focus { border-color:var(--purple); }
+.itin-options { display:flex; align-items:center; gap:8px; margin-top:9px; }
+.itin-start-block {
+  margin-top:10px; padding:10px 12px; border-radius:10px;
+  background:rgba(74,222,128,.07); border:1px solid rgba(74,222,128,.2);
+  display:flex; flex-direction:column; gap:8px;
+}
+.itin-start-label { font-size:11px; color:var(--muted); font-weight:700; text-transform:uppercase; letter-spacing:.5px; }
+.itin-start-row { display:flex; align-items:center; gap:8px; }
+.itin-start-text { font-size:12px; color:var(--text); flex:1; }
+.itin-opt-label { font-size:11px; color:var(--muted); flex:1; }
+.toggle { position:relative; width:34px; height:18px; cursor:pointer; display:inline-block; flex-shrink:0; }
+.toggle input { opacity:0; width:0; height:0; }
+.toggle-slider { position:absolute; inset:0; background:var(--border); border-radius:16px; transition:.3s; }
+.toggle-slider::before { content:''; position:absolute; width:14px; height:14px; left:2px; top:2px; background:white; border-radius:50%; transition:.3s; }
+.toggle input:checked+.toggle-slider { background:var(--purple); }
+.toggle input:checked+.toggle-slider::before { transform:translateX(16px); }
+.add-stop-hint { margin:10px 14px; font-size:11px; color:var(--purple); text-align:center; padding:9px; background:rgba(167,139,250,.08); border-radius:8px; border:1px dashed rgba(167,139,250,.3); flex-shrink:0; }
+.stops-container { flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+.stop-item {
+  display:flex; align-items:center; gap:7px; padding:9px 14px;
+  border-bottom:1px solid rgba(15,52,96,.3); min-height:52px;
+}
+.stop-item:active { background:rgba(15,52,96,.4); }
+.stop-num { width:24px; height:24px; border-radius:50%; background:var(--purple); color:#fff; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.stop-num.start { background:var(--green); color:#0a2a00; }
+.stop-num.end { background:var(--orange); color:#2a0a00; }
+.stop-info { flex:1; min-width:0; }
+.stop-name { font-size:12px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.stop-dist { font-size:10px; color:var(--muted); margin-top:2px; }
+.stop-remove { background:none; border:none; color:var(--muted); cursor:pointer; font-size:16px; padding:4px; min-width:36px; min-height:36px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.stop-remove:active { color:var(--red); }
+.drag-handle { color:var(--muted); font-size:14px; cursor:grab; flex-shrink:0; }
+.empty-stops { padding:24px 16px; text-align:center; color:var(--muted); font-size:12px; line-height:1.7; }
+.loop-return { padding:7px 14px; font-size:10px; color:var(--muted); text-align:center; border-bottom:1px solid rgba(15,52,96,.3); }
+.itin-actions { padding:12px 14px; border-top:1px solid var(--border); display:flex; flex-direction:column; gap:7px; flex-shrink:0; }
+/* ─── Stop search dropdown ─── */
+.stop-search-wrap { padding:8px 14px; border-bottom:1px solid var(--border); position:relative; flex-shrink:0; }
+.stop-search-input {
+  width:100%; background:rgba(255,255,255,.07); border:1px solid var(--border);
+  border-radius:10px; padding:9px 12px; font-size:13px; color:var(--text); outline:none;
+  box-sizing:border-box;
+}
+.stop-search-input:focus { border-color:var(--purple); }
+.stop-search-dropdown {
+  position:absolute; left:14px; right:14px; top:calc(100% - 4px);
+  background:var(--panel); border:1px solid var(--purple);
+  border-radius:0 0 10px 10px; z-index:500;
+  max-height:180px; overflow-y:auto; -webkit-overflow-scrolling:touch;
+  box-shadow:0 8px 24px rgba(0,0,0,.4);
+}
+.stop-search-dropdown.hidden { display:none; }
+.stop-search-item {
+  padding:11px 14px; font-size:12px; color:var(--text); cursor:pointer;
+  border-bottom:1px solid rgba(15,52,96,.3);
+  display:flex; align-items:center; gap:8px;
+}
+.stop-search-item:last-child { border-bottom:none; }
+.stop-search-item:active, .stop-search-item:hover { background:rgba(167,139,250,.15); }
+.stop-search-item.already-in { opacity:.45; pointer-events:none; }
+.stop-search-empty { padding:12px 14px; font-size:11px; color:var(--muted); text-align:center; }
+.calc-btn { padding:12px; border-radius:10px; border:none; font-size:12px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; transition:all .2s; width:100%; min-height:44px; }
+.calc-btn-primary { background:var(--purple); color:#fff; }
+.calc-btn-primary:active { background:#8b5cf6; }
+.calc-btn-primary:disabled { opacity:.4; cursor:not-allowed; }
+.itin-result { background:rgba(167,139,250,.1); border:1px solid rgba(167,139,250,.2); border-radius:10px; padding:10px 12px; font-size:12px; }
+.itin-result-row { display:flex; justify-content:space-between; align-items:center; margin:4px 0; }
+.itin-result-key { color:var(--muted); }
+.itin-result-val { font-weight:700; color:var(--text); }
+.export-row { display:flex; gap:7px; }
+.export-btn { flex:1; padding:10px; border-radius:9px; border:none; font-size:11px; font-weight:700; cursor:pointer; text-decoration:none; display:flex; align-items:center; justify-content:center; gap:5px; min-height:44px; }
+.export-btn:active { opacity:.75; }
+.export-gmaps { background:linear-gradient(135deg,#34a853,#0f9d58); color:#fff; }
+.export-waze  { background:linear-gradient(135deg,#33ccff,#0066cc); color:#fff; }
+
+/* ─── NOTION SYNC BUTTONS ────────────────────────────────── */
+.notion-sync-bar {
+  display:flex; gap:6px; padding:8px 14px;
+  border-bottom:1px solid var(--border); flex-shrink:0;
+  align-items:center;
+}
+.sync-btn {
+  flex:1; padding:9px 10px; border-radius:10px; border:none;
+  font-size:11px; font-weight:700; cursor:pointer;
+  display:flex; align-items:center; justify-content:center; gap:5px;
+  min-height:40px; transition:opacity .2s;
+}
+.sync-btn:active { opacity:.7; }
+.sync-btn:disabled { opacity:.4; cursor:not-allowed; }
+.btn-save-notion  { background:rgba(255,255,255,.1); color:var(--text); border:1px solid var(--border); }
+.btn-load-notion  { background:rgba(245,166,35,.15); color:var(--gold); border:1px solid rgba(245,166,35,.25); }
+.sync-status {
+  font-size:10px; color:var(--muted); text-align:center;
+  padding:2px 14px 6px; flex-shrink:0; line-height:1.4; min-height:18px;
+}
+.sync-status.ok   { color:var(--green); }
+.sync-status.err  { color:var(--red); }
+.sync-status.busy { color:var(--gold); }
+
+/* ─── SEARCH BAR ─────────────────────────────────────────── */
+.search-wrap { padding:8px 14px; border-bottom:1px solid var(--border); flex-shrink:0; }
+.search-input {
+  width:100%; background:rgba(255,255,255,.07); border:1px solid var(--border);
+  border-radius:10px; padding:8px 12px; font-size:14px; color:var(--text); outline:none;
+}
+.search-input::placeholder { color:var(--muted); }
+.search-input:focus { border-color:var(--gold); }
+
+/* Leaflet */
+.leaflet-popup-content-wrapper { background:var(--panel); color:var(--text); border:1px solid var(--border); }
+.leaflet-popup-tip { background:var(--panel); }
+.leaflet-control-zoom a { background:var(--panel) !important; color:var(--text) !important; border-color:var(--border) !important; }
+
+/* ─── IOS INSTALL BANNER ─────────────────────────────────── */
+.ios-banner {
+  display:none;
+  position:fixed; bottom:0; left:0; right:0; z-index:2000;
+  background:linear-gradient(135deg,#1e3a5f,#16213e);
+  border-top:1px solid var(--gold);
+  padding:14px 16px calc(14px + var(--safe-bottom));
+  flex-direction:column; gap:10px;
+  box-shadow:0 -4px 20px rgba(0,0,0,.5);
+  animation:slideUpBanner .4s ease;
+}
+@keyframes slideUpBanner { from{transform:translateY(100%)} to{transform:translateY(0)} }
+.ios-banner.visible { display:flex; }
+.ios-banner-close {
+  position:absolute; top:10px; right:14px;
+  background:none; border:none; color:var(--muted);
+  font-size:20px; cursor:pointer; padding:4px; min-width:32px;
+}
+.ios-banner-title { font-size:13px; font-weight:700; color:var(--gold); }
+.ios-banner-steps { display:flex; flex-direction:column; gap:6px; }
+.ios-banner-step {
+  display:flex; align-items:center; gap:10px;
+  font-size:12px; color:var(--text);
+}
+.ios-step-num {
+  width:24px; height:24px; border-radius:50%;
+  background:var(--gold); color:#3d1f00;
+  font-size:11px; font-weight:700;
+  display:flex; align-items:center; justify-content:center; flex-shrink:0;
+}
+.ios-banner-btn {
+  background:var(--gold); color:#3d1f00;
+  border:none; border-radius:10px; padding:11px;
+  font-size:13px; font-weight:700; cursor:pointer;
+  min-height:44px;
+}
+
+/* ─── IOS INSTALL MODAL (full) ───────────────────────────── */
+.modal-overlay {
+  display:none; position:fixed; inset:0; z-index:3000;
+  background:rgba(0,0,0,.7); backdrop-filter:blur(4px);
+  align-items:flex-end; justify-content:center;
+}
+.modal-overlay.open { display:flex; }
+.modal-box {
+  background:var(--panel); border-radius:20px 20px 0 0;
+  padding:20px 20px calc(20px + var(--safe-bottom));
+  width:100%; max-width:500px;
+  animation:slideUpBanner .35s ease;
+}
+.modal-title { font-size:17px; font-weight:700; color:var(--gold); margin-bottom:4px; }
+.modal-sub { font-size:12px; color:var(--muted); margin-bottom:16px; }
+.modal-steps { display:flex; flex-direction:column; gap:12px; margin-bottom:20px; }
+.modal-step { display:flex; align-items:center; gap:12px; }
+.modal-step-icon { font-size:22px; width:36px; text-align:center; flex-shrink:0; }
+.modal-step-text { font-size:13px; color:var(--text); line-height:1.4; }
+.modal-step-text strong { color:var(--gold); }
+.modal-close-btn {
+  width:100%; padding:13px; border-radius:12px; border:none;
+  background:var(--gold); color:#3d1f00; font-size:14px; font-weight:700;
+  cursor:pointer; min-height:48px;
+}
+</style>
+</head>
+<body>
+
+<!-- IOS INSTALL MODAL -->
+<div class="modal-overlay" id="iosModal" onclick="if(event.target===this)closeModal()">
+  <div class="modal-box">
+    <div class="modal-title">📲 Installer RucherMap</div>
+    <div class="modal-sub">Ajoutez l'application à votre écran d'accueil pour y accéder rapidement, comme une vraie app.</div>
+    <div class="modal-steps">
+      <div class="modal-step">
+        <div class="modal-step-icon">🧭</div>
+        <div class="modal-step-text">Ce fichier doit être ouvert dans <strong>Safari</strong> — pas Chrome ni Firefox.</div>
+      </div>
+      <div class="modal-step">
+        <div class="modal-step-icon">1️⃣</div>
+        <div class="modal-step-text">Appuyez sur le bouton <strong>Partager</strong> <span style="font-size:16px;">⎋</span> en bas de Safari</div>
+      </div>
+      <div class="modal-step">
+        <div class="modal-step-icon">2️⃣</div>
+        <div class="modal-step-text">Faites défiler et appuyez sur <strong>« Sur l'écran d'accueil »</strong></div>
+      </div>
+      <div class="modal-step">
+        <div class="modal-step-icon">3️⃣</div>
+        <div class="modal-step-text">Appuyez sur <strong>Ajouter</strong> en haut à droite — l'icône 🐝 apparaîtra sur votre écran !</div>
+      </div>
+    </div>
+    <a href="safari-extension://" onclick="event.preventDefault();" style="display:block;text-align:center;padding:13px;border-radius:12px;background:rgba(0,122,255,0.15);color:#0a84ff;font-size:13px;font-weight:700;text-decoration:none;border:1px solid rgba(0,122,255,0.3);margin-bottom:8px;">
+      🧭 Si ce n'est pas Safari — copiez l'URL et collez-la dans Safari
+    </a>
+    <button class="modal-close-btn" onclick="closeModal()">✅ Compris !</button>
+  </div>
+</div>
+
+<!-- IOS BANNER (compact) -->
+<div class="ios-banner" id="iosBanner">
+  <button class="ios-banner-close" onclick="dismissBanner()">✕</button>
+  <div class="ios-banner-title">📲 Installer sur votre iPhone</div>
+  <div class="ios-banner-steps">
+    <div class="ios-banner-step"><div class="ios-step-num">1</div>Ouvrez ce fichier dans <strong>Safari</strong> (pas Chrome)</div>
+    <div class="ios-banner-step"><div class="ios-step-num">2</div>Appuyez sur <strong>⎋ Partager</strong> → <strong>« Sur l'écran d'accueil »</strong></div>
+  </div>
+  <a href="x-safari-https://www.notion.so" onclick="event.preventDefault();openModal();" class="ios-banner-btn" style="text-align:center;text-decoration:none;display:block;">
+    Voir les instructions complètes
+  </a>
+</div>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-left">
+    <span class="logo">🐝</span>
+    <div>
+      <div class="app-title">RucherMap</div>
+      <div class="app-sub">Nouvelle-Aquitaine</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <button class="hbtn" id="installBtn" onclick="openModal()" style="display:none;">📲</button>
+    <button class="hbtn" onclick="loadData()" id="refreshBtn">🔄</button>
+  </div>
+</div>
+
+<!-- DESKTOP TABS -->
+<div class="tabs">
+  <button class="tab active" id="tab-emp"   onclick="switchTab('emp')">📍 Emplacements</button>
+  <button class="tab"        id="tab-itin"  onclick="switchTab('itin')">🗺️ Itinéraires</button>
+</div>
+
+<div class="main">
+  <!-- DESKTOP SIDEBAR -->
+  <div class="sidebar" id="desktopSidebar">
+    <div id="deskEmpPanel" style="display:flex;flex-direction:column;height:100%;overflow:hidden;">
+      <div class="panel-header">
+        <span>📍 Emplacements</span>
+        <span class="panel-count" id="deskCount">—</span>
+      </div>
+      <div class="search-wrap">
+        <input class="search-input" placeholder="🔍 Rechercher..." oninput="filterSearch(this.value)" id="deskSearch">
+      </div>
+      <div class="filters">
+        <div class="filter-label">Afficher</div>
+        <div class="filter-row">
+          <button class="fbtn fbtn-gps"   id="btnGPS"   onclick="toggleFilter('gps')">✅ Avec GPS</button>
+          <button class="fbtn fbtn-nogps" id="btnNoGPS" onclick="toggleFilter('nogps')">⚠️ Sans GPS</button>
+        </div>
+      </div>
+      <div class="emp-list" id="deskEmpList"></div>
+      <div class="nogps-section" id="deskNogpsSection" style="display:none;">
+        <div class="nogps-title">⚠️ GPS manquant</div>
+        <ul class="nogps-list" id="deskNogpsList"></ul>
+      </div>
+    </div>
+    <div id="deskItinPanel" style="display:none;height:100%;">
+      <div class="itin-wrap" id="deskItinWrap"></div>
+    </div>
+  </div>
+
+  <!-- MAP -->
+  <div class="map-wrap">
+    <div id="map"></div>
+    <div class="route-hint" id="routeHint">🗺️ Touchez un 🐝 pour ajouter une étape</div>
+    <div class="info-panel" id="infoPanel">
+      <span class="info-close" onclick="closeInfo()">✕</span>
+      <div class="info-title" id="infoTitle"></div>
+      <div id="infoBody"></div>
+    </div>
+    <div class="loading-overlay" id="loadingOverlay">
+      <div class="spinner"></div>
+      <div class="loading-text">Synchronisation Notion…</div>
+    </div>
+  </div>
+</div>
+
+<!-- MOBILE BOTTOM SHEET (emplacements) -->
+<div class="bottom-sheet" id="mobileSheet">
+  <div class="sheet-handle-wrap">
+    <button class="sheet-toggle-btn" onclick="cycleSheet()" id="sheetToggleBtn">⌃ Agrandir</button>
+    <div class="sheet-handle" onclick="cycleSheet()"></div>
+    <button class="sheet-close-btn" onclick="closeSheet()">✕</button>
+  </div>
+  <div style="padding:0 14px 6px;display:flex;gap:8px;flex-shrink:0;">
+    <input class="search-input" style="flex:1;" placeholder="🔍 Rechercher..." oninput="filterSearch(this.value)" id="mobSearch">
+  </div>
+  <div class="sheet-content">
+    <div id="mobEmpList"></div>
+    <div class="nogps-section" id="mobNogpsSection" style="display:none;">
+      <div class="nogps-title">⚠️ GPS manquant</div>
+      <ul class="nogps-list" id="mobNogpsList"></ul>
+    </div>
+    <!-- Mobile info panel inside sheet -->
+    <div id="mobInfoPanel" style="display:none;padding:14px;border-top:1px solid var(--border);">
+      <div class="info-title" id="mobInfoTitle"></div>
+      <div id="mobInfoBody"></div>
+    </div>
+    <!-- Mobile itinerary panel inside sheet -->
+    <div id="mobItinPanel" style="display:none;">
+      <div class="itin-wrap" id="mobItinWrap"></div>
+    </div>
+  </div>
+</div>
+
+<!-- MOBILE BOTTOM NAV -->
+<div class="bottom-nav">
+  <button class="bnav-btn active" id="bnav-emp"  onclick="mobileTab('emp')">
+    <span class="icon">📍</span>Emplacements
+  </button>
+  <button class="bnav-btn" id="bnav-itin" onclick="mobileTab('itin')">
+    <span class="icon">🗺️</span>Itinéraires
+  </button>
+  <button class="bnav-btn" id="bnav-map"  onclick="mobileTab('map')">
+    <span class="icon">🗺</span>Carte seule
+  </button>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════
+// DONNÉES — màj Notion 04/05/2026
+// ══════════════════════════════════════════════════════════
+const NOTION_DATA = [
+  // ── Zone Pyrénées-Atlantiques (Kiwi) ──────────────────────
+  {name:"107 Soreli/Hayward",      addr:"Pyrénées-Atlantiques",          lat:43.5108625, lng:-0.9005552,  culture:"Kiwi", url:"https://www.notion.so/036e9324b85d4c398029dcc4fd539958"},
+  {name:"161 Hayward",             addr:"Pyrénées-Atlantiques",          lat:43.5630065, lng:-1.1257324,  culture:"Kiwi", url:"https://www.notion.so/a08e393118fd42ef9456111bc3db66fe"},
+  {name:"226 Hayward",             addr:"Pyrénées-Atlantiques",          lat:43.5187712, lng:-1.0455592,  culture:"Kiwi", url:"https://www.notion.so/d68664a0d32f4351a796ae4d9c5066a6"},
+  {name:"228 Soreli",              addr:"Pyrénées-Atlantiques",          lat:43.5386682, lng:-0.9856249,  culture:"Kiwi", url:"https://www.notion.so/1ef8380e523c491cb2b0ae434bfd0bbc"},
+  {name:"271 - Hayward 2",         addr:"Pyrénées-Atlantiques",          lat:43.3530424, lng:-0.3622209,  culture:"Kiwi", url:"https://www.notion.so/920371aacfdf402cadb743418113e989"},
+  {name:"271 - Hayward 1",         addr:"Pyrénées-Atlantiques",          lat:43.3547426, lng:-0.3716302,  culture:"Kiwi", url:"https://www.notion.so/155031704cdf40d28ca96f5d668ebf6e"},
+  {name:"299 - Hayward",           addr:"Route du Saison, 64390 Osserain-Rivareyte", lat:43.37094,   lng:-0.94622,   culture:"Kiwi", url:"https://www.notion.so/33bdd3b1ffe380ec9d61db450e796967"},
+  {name:"305 Soreli/Hayward",      addr:"Pyrénées-Atlantiques",          lat:43.5405612, lng:-1.0465595,  culture:"Kiwi", url:"https://www.notion.so/a9d89bb7aae44da7b3452253f015da68"},
+  {name:"3002.1 Hayward",          addr:"Pyrénées-Atlantiques",          lat:43.5882274, lng:-0.5399385,  culture:"Kiwi", url:"https://www.notion.so/89fe17513cfb44ad9670fcea88d3f928"},
+  {name:"3009.1 Hayward",          addr:"Pyrénées-Atlantiques",          lat:43.5365586, lng:-0.9616647,  culture:"Kiwi", url:"https://www.notion.so/417d2bdb21ae45ccb29858c720efcb5b"},
+  {name:"3016.1/2 Hayward/Soreli", addr:"Pyrénées-Atlantiques",          lat:43.5983361, lng:-0.5328286,  culture:"Kiwi", url:"https://www.notion.so/b49f98384b6e4da6bec3ef0862271465"},
+  {name:"3024 - Hayward",          addr:"Pyrénées-Atlantiques",          lat:43.7501153, lng:-0.3318161,  culture:"Kiwi", url:"https://www.notion.so/8f8872c774ed4509900750924c687b54"},
+  {name:"3027.1 Hayward",          addr:"Pyrénées-Atlantiques",          lat:43.705681,  lng:-0.5527655,  culture:"Kiwi", url:"https://www.notion.so/0fc5be0fd6e94bdb9361ad496597c402"},
+  {name:"3028 Hayward/Soreli",     addr:"Pyrénées-Atlantiques",          lat:43.3407682, lng:-0.7789613,  culture:"Kiwi", url:"https://www.notion.so/b781aec8939a478b88735ef93517292e"},
+  // ── Zone Lot-et-Garonne / Gironde / Dordogne ─────────────
+  {name:"Belge",                   addr:"Caubeyres, Lot-et-Garonne",     lat:44.273176,  lng:0.228798,    culture:"Kiwi", url:"https://www.notion.so/33bdd3b1ffe380cabe4fe697d94ede06"},
+  {name:"Christophe",              addr:"Sembas, Nouvelle-Aquitaine",    lat:44.31772,   lng:0.64955,     culture:"Kiwi", url:"https://www.notion.so/33bdd3b1ffe3805191e7edc8d36e0a87"},
+  {name:"FAFA",                    addr:"Gardit, Saint-Symphorien, Gironde", lat:44.45656, lng:-0.54136,  culture:"Kiwi", url:"https://www.notion.so/33bdd3b1ffe380c19d51ca48c07f7dcb"},
+  {name:"Lugos",                   addr:"Gironde",                       lat:44.483762,  lng:-0.89001,    culture:"Kiwi", url:"https://www.notion.so/33bdd3b1ffe38055a4f9d09cb55eebf0"},
+  {name:"Menuisier",               addr:"Caubeyres, Lot-et-Garonne",     lat:44.270704,  lng:0.232417,    culture:"Kiwi", url:"https://www.notion.so/33bdd3b1ffe380389882f0c118f51be4"},
+  {name:"Montesquieu",             addr:"Montesquieu, Lot-et-Garonne",   lat:44.20349,   lng:0.43818,     culture:"Kiwi / Pomme / Myrtille", url:"https://www.notion.so/33bdd3b1ffe380608267f69d3abefc40"},
+  {name:"Monteton",                addr:"Monteton, Lot-et-Garonne",      lat:44.62245,   lng:0.25769,     culture:"Kiwi", url:"https://www.notion.so/33bdd3b1ffe38023b006caf1c61ab3fb"},
+  {name:"Mortemousque",            addr:"Beaumontois en Périgord, Dordogne", lat:44.77125, lng:0.76663,   culture:"Kiwi", url:"https://www.notion.so/33bdd3b1ffe3806d8c01dceb431e701b"},
+  {name:"Rucher Lugos",            addr:"Gironde",                       lat:44.461128,  lng:-0.9518,     culture:"",     url:"https://www.notion.so/a04f7b5f468a4f2e9b55982803bc6be5"},
+  {name:"Toto",                    addr:"Allez-et-Cazeneuve, Lot-et-Garonne", lat:44.40076, lng:0.62912,  culture:"Kiwi", url:"https://www.notion.so/33bdd3b1ffe38085b565c88ec59fb681"},
+  {name:"Veolia",                  addr:"Caubeyres, Lot-et-Garonne",     lat:44.25772,   lng:0.20189,     culture:"",     url:"https://www.notion.so/33bdd3b1ffe380168639da54c2bd8264"},
+  {name:"Vioc",                    addr:"Lot-et-Garonne",                lat:44.273042,  lng:0.191693,    culture:"Kiwi", url:"https://www.notion.so/33bdd3b1ffe3809a8d75f65d72d6ea84"},
+  {name:"Watrigant",               addr:"Pyrénées-Atlantiques",          lat:43.885935,  lng:-0.438276,   culture:"Kiwi", url:"https://www.notion.so/33bdd3b1ffe380cc89d3cbec0143e22b"},
+];
+const NO_GPS = ["Kiwi Jaune", "Saint Avit"];
+
+// ══════════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════════
+let map, routeLayer=null, clusterGroup=null;
+let selectedName=null, showGPS=true, showNoGPS=true;
+let currentTab='emp', mobileView='emp';
+let searchQuery='';
+let savedItineraries=[], activeItinId=null, dragSrcIdx=null;
+let sheetOpen=false;
+const isMobile=()=>window.innerWidth<=700;
+
+// ══════════════════════════════════════════════════════════
+// MAP INIT
+// ══════════════════════════════════════════════════════════
+function initMap() {
+  const center = [44.0, -0.2]; // centre entre les deux zones
+  map = L.map('map',{zoomControl:true,tap:false,tapTolerance:15}).setView(center,8);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    maxZoom:19
+  }).addTo(map);
+}
+
+// ── Icons ────────────────────────────────────────────────
+function makeIcon(color, label='🐝') {
+  const isEmoji=/\p{Emoji}/u.test(label)&&label.length<=2;
+  return L.divIcon({
+    className:'',
+    html:`<div style="width:36px;height:36px;background:${color};border:3px solid white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:${isEmoji?'15px':'11px'};font-weight:700;box-shadow:0 3px 10px rgba(0,0,0,.4);cursor:pointer;">${label}</div>`,
+    iconSize:[36,36],iconAnchor:[18,18],popupAnchor:[0,-22]
+  });
+}
+
+// ── Render markers ────────────────────────────────────────
+function renderMarkers() {
+  NOTION_DATA.forEach(emp=>{
+    if(emp._marker) map.removeLayer(emp._marker);
+    const m=L.marker([emp.lat,emp.lng],{icon:makeIcon('#4ade80')}).addTo(map);
+    m.on('click',()=>onMarkerClick(emp.name));
+    emp._marker=m;
+  });
+}
+
+function refreshMarkerIcons() {
+  const itin=getActiveItin();
+  const stops=itin?itin.stops:[];
+  NOTION_DATA.forEach(emp=>{
+    if(!emp._marker) return;
+    const idx=stops.findIndex(s=>s.name===emp.name);
+    if(idx===-1) emp._marker.setIcon(makeIcon('#4ade80'));
+    else if(idx===0) emp._marker.setIcon(makeIcon('#4ade80','A'));
+    else if(idx===stops.length-1&&!itin.loop) emp._marker.setIcon(makeIcon('#fb923c','Z'));
+    else emp._marker.setIcon(makeIcon('#a78bfa',String(idx+1)));
+  });
+}
+
+function onMarkerClick(name) {
+  if((currentTab==='itin'||mobileView==='itin') && getActiveItin()) {
+    addStopToItin(name);
+  } else {
+    if(isMobile()) {
+      showMobileInfo(name);
+    } else {
+      selectEmp(name);
+    }
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// TABS (desktop)
+// ══════════════════════════════════════════════════════════
+function switchTab(tab) {
+  currentTab=tab;
+  document.getElementById('tab-emp').classList.toggle('active',tab==='emp');
+  document.getElementById('tab-itin').classList.toggle('active',tab==='itin');
+  document.getElementById('deskEmpPanel').style.display=tab==='emp'?'flex':'none';
+  document.getElementById('deskItinPanel').style.display=tab==='itin'?'block':'none';
+  document.getElementById('routeHint').classList.toggle('visible',tab==='itin'&&!!getActiveItin());
+  if(tab==='emp'){closeInfo();clearRouteLayer();refreshMarkerIcons();}
+  if(tab==='itin'){renderDesktopItin();refreshMarkerIcons();if(getActiveItin()?.result)drawRoute();}
+}
+
+// ══════════════════════════════════════════════════════════
+// MOBILE NAV
+// ══════════════════════════════════════════════════════════
+function mobileTab(view) {
+  mobileView=view;
+  ['emp','itin','map'].forEach(v=>{
+    document.getElementById('bnav-'+v).classList.toggle('active',v===view);
+  });
+  if(view==='map'){
+    closeSheet();
+    document.getElementById('routeHint').classList.remove('visible');
+  } else if(view==='emp'){
+    document.getElementById('mobInfoPanel').style.display='none';
+    document.getElementById('mobItinPanel').style.display='none';
+    document.getElementById('mobEmpList').style.display='block';
+    document.getElementById('mobNogpsSection').style.display='block';
+    renderMobileEmp();
+    openSheet();
+    document.getElementById('routeHint').classList.remove('visible');
+    clearRouteLayer(); refreshMarkerIcons();
+  } else if(view==='itin'){
+    document.getElementById('mobEmpList').style.display='none';
+    document.getElementById('mobNogpsSection').style.display='none';
+    document.getElementById('mobInfoPanel').style.display='none';
+    document.getElementById('mobItinPanel').style.display='block';
+    renderMobileItin();
+    openSheet();
+    document.getElementById('routeHint').classList.toggle('visible',!!getActiveItin());
+    refreshMarkerIcons();
+    if(getActiveItin()?.result)drawRoute();
+  }
+}
+
+// ── Sheet snap positions ──────────────────────────────────
+// States: 'hidden' | 'bottom' | 'mid'
+let sheetSnap = 'hidden';
+
+function setSnap(snap) {
+  const sheet = document.getElementById('mobileSheet');
+  const btn = document.getElementById('sheetToggleBtn');
+  sheet.classList.remove('snap-hidden','snap-bottom','snap-mid','snap-full','open');
+  if (snap !== 'hidden') sheet.classList.add('snap-' + snap);
+  sheetSnap = snap;
+  sheetOpen = (snap !== 'hidden');
+  if (btn) {
+    if (snap === 'mid') { btn.textContent = '⌄ Réduire'; }
+    else { btn.textContent = '⌃ Agrandir'; }
+  }
+}
+
+function cycleSheet() {
+  if (sheetSnap === 'mid') setSnap('bottom');
+  else setSnap('mid');
+}
+
+function openSheet()  { setSnap('mid'); }
+function closeSheet() { setSnap('hidden'); }
+function toggleSheet(){ sheetOpen ? closeSheet() : openSheet(); }
+
+// ══════════════════════════════════════════════════════════
+// EMPLACEMENT RENDER
+// ══════════════════════════════════════════════════════════
+function filteredEmps() {
+  return NOTION_DATA.filter(e=>{
+    if(searchQuery) return e.name.toLowerCase().includes(searchQuery.toLowerCase())||e.addr.toLowerCase().includes(searchQuery.toLowerCase());
+    return true;
+  });
+}
+function filterSearch(q) { searchQuery=q; renderSidebar(); }
+
+function empItemHTML(emp) {
+  const itin=getActiveItin();
+  const inRoute=itin?itin.stops.some(s=>s.name===emp.name):false;
+  return `
+    <div class="emp-name">${emp.name}</div>
+    <div class="emp-addr">${emp.addr}</div>
+    <div class="emp-badges">
+      <span class="badge badge-gps">📍 GPS</span>
+      ${emp.culture?`<span class="badge badge-culture">🌸 ${emp.culture}</span>`:''}
+      ${inRoute?`<span class="badge badge-route">🗺️ Tournée</span>`:''}
+    </div>`;
+}
+
+function renderSidebar() {
+  // Desktop
+  const deskList=document.getElementById('deskEmpList');
+  deskList.innerHTML='';
+  filteredEmps().forEach(emp=>{
+    const div=document.createElement('div');
+    const itin=getActiveItin();
+    const inRoute=itin?itin.stops.some(s=>s.name===emp.name):false;
+    div.className='emp-item'+(selectedName===emp.name?' selected':'')+(inRoute?' in-route':'');
+    div.id='desk-emp-'+emp.name;
+    div.innerHTML=empItemHTML(emp);
+    div.onclick=()=>selectEmp(emp.name);
+    deskList.appendChild(div);
+  });
+  // No-GPS
+  document.getElementById('deskNogpsSection').style.display=searchQuery?'none':'block';
+  document.getElementById('deskNogpsList').innerHTML=NO_GPS.map(n=>`<li>${n}</li>`).join('');
+  // Stats
+
+  document.getElementById('deskCount').textContent=NOTION_DATA.length;
+  // Mobile
+  renderMobileEmp();
+}
+
+function renderMobileEmp() {
+  const mobList=document.getElementById('mobEmpList');
+  mobList.innerHTML='';
+  filteredEmps().forEach(emp=>{
+    const div=document.createElement('div');
+    const itin=getActiveItin();
+    const inRoute=itin?itin.stops.some(s=>s.name===emp.name):false;
+    div.className='emp-item'+(inRoute?' in-route':'');
+    div.innerHTML=empItemHTML(emp);
+    div.onclick=()=>{ selectedName=emp.name; showMobileInfo(emp.name); };
+    mobList.appendChild(div);
+  });
+  document.getElementById('mobNogpsSection').style.display=searchQuery?'none':'block';
+  document.getElementById('mobNogpsList').innerHTML=NO_GPS.map(n=>`<li>${n}</li>`).join('');
+}
+
+function selectEmp(name) {
+  selectedName=name; renderSidebar();
+  const emp=NOTION_DATA.find(e=>e.name===name); if(!emp) return;
+  map.flyTo([emp.lat,emp.lng],14,{duration:1.2});
+  buildInfoPanel(emp, 'infoTitle','infoBody', false);
+  document.getElementById('infoPanel').classList.add('open');
+  const el=document.getElementById('desk-emp-'+name);
+  if(el)el.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+function showMobileInfo(name) {
+  const emp=NOTION_DATA.find(e=>e.name===name); if(!emp) return;
+  map.flyTo([emp.lat,emp.lng],14,{duration:1});
+  // Basculer vers l'onglet emplacements
+  mobileView='emp';
+  document.getElementById('bnav-emp').classList.add('active');
+  document.getElementById('bnav-itin').classList.remove('active');
+  document.getElementById('bnav-map').classList.remove('active');
+  // Masquer liste et afficher panneau info
+  document.getElementById('mobEmpList').style.display='none';
+  document.getElementById('mobNogpsSection').style.display='none';
+  document.getElementById('mobItinPanel').style.display='none';
+  buildInfoPanel(emp,'mobInfoTitle','mobInfoBody',true);
+  document.getElementById('mobInfoPanel').style.display='block';
+  // Ouvrir le panneau en position mi-hauteur
+  setSnap('mid');
+  const sheetContent=document.querySelector('.sheet-content');
+  if(sheetContent) sheetContent.scrollTop=0;
+}
+
+function buildInfoPanel(emp, titleId, bodyId, mobile) {
+  document.getElementById(titleId).textContent=`📍 ${emp.name}`;
+  const inRoute=!!getActiveItin()?.stops.find(s=>s.name===emp.name);
+  document.getElementById(bodyId).innerHTML=`
+    ${mobile?`<button onclick="backToList()" style="background:none;border:none;color:var(--purple);font-size:12px;font-weight:600;cursor:pointer;margin-bottom:8px;padding:0;">← Retour</button><br>`:''}
+    <div class="info-row"><span class="info-key">Adresse</span><span class="info-val">${emp.addr}</span></div>
+    ${emp.culture?`<div class="info-row"><span class="info-key">Culture</span><span class="info-val">🌸 ${emp.culture}</span></div>`:''}
+    <div class="info-row"><span class="info-key">GPS</span><span class="info-val">${emp.lat.toFixed(5)}, ${emp.lng.toFixed(5)}</span></div>
+    <hr class="info-sep">
+    <a href="comgooglemaps://?q=${emp.lat},${emp.lng}&zoom=17" class="action-btn btn-gmaps">🗺️ Google Maps</a>
+    <a href="waze://?ll=${emp.lat},${emp.lng}&navigate=yes" class="action-btn btn-waze">🚗 Waze</a>
+    ${getActiveItin()?`<button class="action-btn btn-addstop" onclick="addStopToItin('${emp.name}');${mobile?'backToList()':'closeInfo();'}">${inRoute?'✅ Déjà dans la tournée':'➕ Ajouter à la tournée'}</button>`:''}
+    <a href="${emp.url}" target="_blank" class="action-btn btn-notion">📋 Voir dans Notion</a>`;
+}
+
+function backToList() {
+  document.getElementById('mobInfoPanel').style.display='none';
+  document.getElementById('mobEmpList').style.display='block';
+  document.getElementById('mobNogpsSection').style.display='block';
+  const sheetContent=document.querySelector('.sheet-content');
+  if(sheetContent) sheetContent.scrollTop=0;
+}
+
+function closeInfo() {
+  document.getElementById('infoPanel').classList.remove('open');
+  selectedName=null; renderSidebar();
+}
+
+function toggleFilter(type) {
+  if(type==='gps'){showGPS=!showGPS;document.getElementById('btnGPS').classList.toggle('off',!showGPS);}
+  else{showNoGPS=!showNoGPS;document.getElementById('btnNoGPS').classList.toggle('off',!showNoGPS);
+    document.getElementById('deskNogpsSection').style.display=showNoGPS?'block':'none';
+    document.getElementById('mobNogpsSection').style.display=showNoGPS?'block':'none';}
+  NOTION_DATA.forEach(emp=>{if(emp._marker){showGPS?map.addLayer(emp._marker):map.removeLayer(emp._marker);}});
+}
+
+// ══════════════════════════════════════════════════════════
+// ITINERARY SHARED
+// ══════════════════════════════════════════════════════════
+function getActiveItin(){return savedItineraries.find(i=>i.id===activeItinId)||null;}
+
+function newItinerary(){
+  const id=Date.now();
+  savedItineraries.push({id,name:`Tournée ${savedItineraries.length+1}`,stops:[],loop:false,result:null,startFromPosition:false});
+  activeItinId=id;
+  if(isMobile()){mobileTab('itin');}else{switchTab('itin');}
+}
+
+function loadItinerary(id){
+  activeItinId=id;clearRouteLayer();
+  renderDesktopItin();renderMobileItin();refreshMarkerIcons();
+  if(getActiveItin()?.result)drawRoute();
+}
+
+function deleteItinerary(id,e){
+  e.stopPropagation();
+  savedItineraries=savedItineraries.filter(i=>i.id!==id);
+  if(activeItinId===id){activeItinId=null;clearRouteLayer();refreshMarkerIcons();}
+  renderDesktopItin();renderMobileItin();
+}
+
+function addStopToItin(name){
+  const itin=getActiveItin();if(!itin)return;
+  if(itin.stops.some(s=>s.name===name))return;
+  itin.stops.push({name,distFromPrev:''});
+  itin.result=null;clearRouteLayer();
+  renderDesktopItin();renderMobileItin();renderSidebar();refreshMarkerIcons();
+}
+
+function removeStop(idx){
+  const itin=getActiveItin();if(!itin)return;
+  itin.stops.splice(idx,1);itin.result=null;clearRouteLayer();
+  renderDesktopItin();renderMobileItin();renderSidebar();refreshMarkerIcons();
+}
+
+// ── Stop search dropdown ─────────────────────────────────
+function filterStopSearch(q, input) {
+  const wrap = input.parentElement;
+  const dropdown = wrap.querySelector('.stop-search-dropdown');
+  const itin = getActiveItin();
+  if (!q.trim()) { dropdown.innerHTML=''; dropdown.classList.add('hidden'); return; }
+  const results = NOTION_DATA.filter(e =>
+    e.name.toLowerCase().includes(q.toLowerCase()) ||
+    e.addr.toLowerCase().includes(q.toLowerCase())
+  ).slice(0, 10);
+  if (!results.length) {
+    dropdown.innerHTML = '<div class="stop-search-empty">Aucun lieu trouvé</div>';
+    dropdown.classList.remove('hidden'); return;
+  }
+  const inRoute = new Set(itin ? itin.stops.map(s=>s.name) : []);
+  dropdown.innerHTML = results.map(e => {
+    const already = inRoute.has(e.name);
+    return `<div class="stop-search-item${already?' already-in':''}"
+      onmousedown="addStopFromSearch('${e.name.replace(/'/g,"\'")}', this)">
+      <span>${already?'✅':'📍'}</span>
+      <span><strong>${e.name}</strong><br><span style="font-size:10px;color:var(--muted)">${e.addr}</span></span>
+    </div>`;
+  }).join('');
+  dropdown.classList.remove('hidden');
+}
+function showStopDropdown(input) {
+  if (input.value.trim()) filterStopSearch(input.value, input);
+}
+function hideStopDropdown(input) {
+  // Delay to allow click on item
+  setTimeout(() => {
+    const dropdown = input.parentElement.querySelector('.stop-search-dropdown');
+    if (dropdown) { dropdown.classList.add('hidden'); }
+  }, 200);
+}
+function addStopFromSearch(name, el) {
+  addStopToItin(name);
+  // Reset input
+  const wrap = el.closest('.stop-search-wrap');
+  if (wrap) {
+    const input = wrap.querySelector('.stop-search-input');
+    const dropdown = wrap.querySelector('.stop-search-dropdown');
+    if (input) input.value = '';
+    if (dropdown) { dropdown.innerHTML=''; dropdown.classList.add('hidden'); }
+  }
+}
+
+function updateItinName(v){
+  const i=getActiveItin();
+  if(!i) return;
+  i.name=v;
+  // Mettre à jour uniquement les labels des saved-list sans re-render complet
+  document.querySelectorAll('.saved-item.active-itin .saved-item-name').forEach(el=>{
+    el.textContent='🗺️ '+v+(i.notionId?'':'' );
+  });
+}
+function toggleLoop(v){const i=getActiveItin();if(i){i.loop=v;i.result=null;clearRouteLayer();renderDesktopItin();renderMobileItin();}}
+function toggleStartPos(v){
+  const i=getActiveItin();if(!i)return;
+  i.startFromPosition=v;
+  i.result=null;clearRouteLayer();
+  // Mettre à jour uniquement le label sans re-render complet
+  document.querySelectorAll('.start-pos-status').forEach(el=>{
+    el.textContent=v?'📍 Position actuelle':'Manuel';
+  });
+  renderDesktopItin();renderMobileItin();
+}
+
+// Drag & drop
+function dragStart(i){dragSrcIdx=i;}
+function dragOver(e,i){e.preventDefault();}
+function dragDrop(i){
+  const itin=getActiveItin();if(!itin||dragSrcIdx===null||dragSrcIdx===i)return;
+  const arr=itin.stops;const item=arr.splice(dragSrcIdx,1)[0];arr.splice(i,0,item);
+  itin.result=null;clearRouteLayer();renderDesktopItin();renderMobileItin();refreshMarkerIcons();
+}
+function dragEnd(){dragSrcIdx=null;}
+
+// ─── Shared itin HTML ────────────────────────────────────
+function itinHTML(itin, prefix) {
+  if(!itin) return `<div style="padding:30px 16px;text-align:center;color:var(--muted);font-size:12px;"><div style="font-size:32px;margin-bottom:10px;">🗺️</div>Appuyez sur <strong style="color:var(--gold)">＋ Nouvelle</strong><br>pour planifier une tournée</div>`;
+  const stops=itin.stops, res=itin.result;
+  return `
+    <div class="itin-editor-header">
+      <input class="itin-name-input" value="${itin.name}" placeholder="Nom de la tournée" oninput="updateItinName(this.value)">
+      <div class="itin-options">
+        <span class="itin-opt-label">🔄 Boucle (retour au départ)</span>
+        <label class="toggle"><input type="checkbox" ${itin.loop?'checked':''} onchange="toggleLoop(this.checked)"><span class="toggle-slider"></span></label>
+      </div>
+      <div class="itin-start-block">
+        <div class="itin-start-label">📍 Lieu de départ</div>
+        <div class="itin-start-row">
+          <span class="itin-start-text">🛰️ Démarrer depuis ma position</span>
+          <label class="toggle"><input type="checkbox" ${itin.startFromPosition?'checked':''} onchange="toggleStartPos(this.checked)"><span class="toggle-slider"></span></label>
+        </div>
+        <div style="font-size:10px;color:var(--muted);">
+          ${itin.startFromPosition
+            ? '✅ L\'itinéraire partira de ta position GPS actuelle dans Maps et Waze'
+            : 'Désactivé — l\'itinéraire part du premier rucher de la liste'}
+        </div>
+      </div>
+    </div>
+    <div class="add-stop-hint">Touchez un marqueur 🐝 sur la carte pour ajouter une étape</div>
+    <div class="stop-search-wrap">
+      <input class="stop-search-input" type="search" autocomplete="off" autocorrect="off"
+        placeholder="🔍 Rechercher un lieu à ajouter…"
+        oninput="filterStopSearch(this.value,this)"
+        onfocus="showStopDropdown(this)"
+        onblur="hideStopDropdown(this)">
+      <div class="stop-search-dropdown hidden"></div>
+    </div>
+    <div class="stops-container">
+      ${stops.length===0
+        ?`<div class="empty-stops">Aucune étape pour l'instant.<br><br>👆 Touchez un rucher<br>sur la carte ou depuis l'onglet Emplacements.</div>`
+        :stops.map((s,i)=>`
+          <div class="stop-item" draggable="true"
+            ondragstart="dragStart(${i})" ondragover="dragOver(event,${i})" ondrop="dragDrop(${i})" ondragend="dragEnd()">
+            <span class="drag-handle">⠿</span>
+            <div class="stop-num ${i===0?'start':i===stops.length-1&&!itin.loop?'end':''}">${i===0?'A':i===stops.length-1&&!itin.loop?'Z':i+1}</div>
+            <div class="stop-info">
+              <div class="stop-name">${s.name}</div>
+              ${s.distFromPrev?`<div class="stop-dist">↳ ${s.distFromPrev}</div>`:''}
+            </div>
+            <button class="stop-remove" onclick="removeStop(${i})">✕</button>
+          </div>`).join('')
+      }
+      ${itin.loop&&stops.length>0?`<div class="loop-return">🔄 Retour vers <strong>${stops[0].name}</strong></div>`:''}
+    </div>
+    <div class="itin-actions">
+      ${res?`
+        <div class="itin-result">
+          <div class="itin-result-row"><span class="itin-result-key">📏 Distance</span><span class="itin-result-val">${res.distStr}</span></div>
+          <div class="itin-result-row"><span class="itin-result-key">⏱️ Durée</span><span class="itin-result-val">${res.timeStr}</span></div>
+          <div class="itin-result-row"><span class="itin-result-key">📍 Étapes</span><span class="itin-result-val">${stops.length}${itin.loop?' (boucle)':''}</span></div>
+        </div>
+        <div class="export-row">
+          <a href="${res.gmapsUrl}" class="export-btn export-gmaps">🗺️ Google Maps</a>
+          <a href="${res.wazeUrl}" class="export-btn export-waze">🚗 Waze</a>
+        </div>`:''}
+      <button class="calc-btn calc-btn-primary" onclick="calculateRoute()" ${stops.length<2?'disabled':''}>
+        🧭 ${res?'Recalculer':'Calculer'} l'itinéraire
+      </button>
+    </div>`;
+}
+
+function notionSyncBarHTML() {
+  const itin = getActiveItin();
+  const canSave = itin && itin.stops.length > 0;
+  return `
+    <div class="notion-sync-bar">
+      <button class="sync-btn btn-save-notion" id="btnSaveNotion"
+        onclick="saveItinToNotion()" ${canSave?'':'disabled'}>
+        ☁️ Sauvegarder
+      </button>
+      <button class="sync-btn btn-load-notion" id="btnLoadNotion"
+        onclick="loadItinsFromNotion()">
+        🔄 Charger Notion
+      </button>
+    </div>
+    <div class="sync-status" id="syncStatus"></div>`;
+}
+
+function savedListHTML(){
+  if(!savedItineraries.length) return '<div style="padding:12px 14px;font-size:11px;color:var(--muted);text-align:center;">Aucune tournée — créez-en une !</div>';
+  return savedItineraries.map(i=>`
+    <div class="saved-item ${i.id===activeItinId?'active-itin':''}" onclick="loadItinerary(${i.id})">
+      <span class="saved-item-name">🗺️ ${i.name}${i.notionId?'<span style="font-size:9px;color:var(--muted);margin-left:4px;">☁️</span>':''}</span>
+      <span class="saved-item-meta">${i.stops.length} étapes${i.loop?' 🔄':''}</span>
+      <button class="del-btn" onclick="deleteItinerary(${i.id},event)">🗑</button>
+    </div>`).join('');
+}
+
+function renderDesktopItin(){
+  const wrap=document.getElementById('deskItinWrap');
+  wrap.innerHTML=`
+    <div class="itin-saved-header"><span>Mes tournées</span><button class="new-itin-btn" onclick="newItinerary()">＋ Nouvelle</button></div>
+    ${notionSyncBarHTML()}
+    <div class="saved-list">${savedListHTML()}</div>
+    <div class="itin-editor">${itinHTML(getActiveItin(),'desk')}</div>`;
+}
+
+function renderMobileItin(){
+  const wrap=document.getElementById('mobItinWrap');
+  wrap.innerHTML=`
+    <div class="itin-saved-header"><span>Mes tournées</span><button class="new-itin-btn" onclick="newItinerary()">＋ Nouvelle</button></div>
+    ${notionSyncBarHTML()}
+    <div class="saved-list">${savedListHTML()}</div>
+    <div class="itin-editor">${itinHTML(getActiveItin(),'mob')}</div>`;
+}
+
+// ══════════════════════════════════════════════════════════
+// NOTION ITINERARY SYNC
+// ══════════════════════════════════════════════════════════
+
+function setSyncStatus(msg, type='') {
+  document.querySelectorAll('#syncStatus').forEach(el => {
+    el.textContent = msg;
+    el.className = 'sync-status' + (type ? ' '+type : '');
+  });
+}
+
+// Extrait le premier bloc JSON valide d'une chaîne de texte libre
+function extractJSON(text) {
+  // 1. Essai direct après nettoyage markdown
+  const cleaned = text.replace(/```json|```/gi, '').trim();
+  try { return JSON.parse(cleaned); } catch(_) {}
+
+  // 2. Cherche le premier { ou [ et tente de parser depuis là
+  const firstBrace  = cleaned.indexOf('{');
+  const firstBrack  = cleaned.indexOf('[');
+  const start = (firstBrace === -1) ? firstBrack
+              : (firstBrack === -1) ? firstBrace
+              : Math.min(firstBrace, firstBrack);
+  if (start === -1) throw new Error('Aucun JSON trouvé dans la réponse');
+
+  // Trouve la fermeture correspondante
+  const openChar  = cleaned[start];
+  const closeChar = openChar === '{' ? '}' : ']';
+  let depth = 0, end = -1;
+  for (let i = start; i < cleaned.length; i++) {
+    if (cleaned[i] === openChar)  depth++;
+    if (cleaned[i] === closeChar) { depth--; if (depth === 0) { end = i; break; } }
+  }
+  if (end === -1) throw new Error('JSON mal formé');
+  return JSON.parse(cleaned.slice(start, end + 1));
+}
+
+async function callAnthropicNotion(userPrompt, systemPrompt) {
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 4000,
+      system: systemPrompt,
+      messages: [{ role: "user", content: userPrompt }],
+      mcp_servers: [{ type: "url", url: "https://mcp.notion.com/mcp", name: "notion" }]
+    })
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`API HTTP ${res.status}: ${errText.slice(0,200)}`);
+  }
+  const data = await res.json();
+  // Rassemble tous les blocs texte (il peut y avoir des blocs tool_use intercalés)
+  const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
+  if (!text) throw new Error(`Réponse vide — stop_reason: ${data.stop_reason}, blocs: ${JSON.stringify(data.content?.map(b=>b.type))}`);
+  return text;
+}
+
+// ── SAUVEGARDER ───────────────────────────────────────────
+async function saveItinToNotion() {
+  const itin = getActiveItin();
+  if (!itin || !itin.stops.length) return;
+
+  setSyncStatus('☁️ Sauvegarde en cours…', 'busy');
+  document.querySelectorAll('#btnSaveNotion,#btnLoadNotion').forEach(b => b.disabled = true);
+  document.getElementById('loadingOverlay').classList.add('active');
+
+  const stopsText = itin.stops.map((s,i) => `${i+1}. ${s.name}`).join('\n');
+
+  try {
+    const prompt = itin.notionId
+      ? `Mets à jour la page Notion avec l'ID "${itin.notionId}" dans la base "Suivi rucher".
+Modifie ces propriétés :
+- "Étapes" (Rich text) : "${stopsText.replace(/\n/g,'\\n')}"
+- "Boucle" (Checkbox) : ${itin.loop}
+- "Date" (Date) : aujourd'hui
+Réponds UNIQUEMENT avec ce JSON : {"success":true,"notionPageId":"${itin.notionId}","action":"updated"}`
+
+      : `Dans la base Notion "Suivi rucher", crée une nouvelle page avec :
+- Titre (Name) : "${itin.name}"
+- "Type" (Select) : "Itinéraire"
+- "Étapes" (Rich text) : "${stopsText.replace(/\n/g,'\\n')}"
+- "Boucle" (Checkbox) : ${itin.loop}
+- "Date" (Date) : aujourd'hui
+Réponds UNIQUEMENT avec ce JSON (remplace <id> par l'ID réel de la page créée) :
+{"success":true,"notionPageId":"<id>","action":"created"}`;
+
+    const text = await callAnthropicNotion(prompt,
+      'Tu gères des données Notion. Réponds UNIQUEMENT avec du JSON valide, sans texte ni markdown autour.');
+
+    const result = extractJSON(text);
+
+    if (result.success && result.notionPageId) {
+      itin.notionId = result.notionPageId;
+      const action = result.action === 'updated' ? 'mise à jour ✏️' : 'créée 🆕';
+      setSyncStatus(`✅ Tournée ${action} dans Notion`, 'ok');
+      setTimeout(() => setSyncStatus(''), 5000);
+    } else {
+      throw new Error(`Réponse inattendue: ${JSON.stringify(result)}`);
+    }
+  } catch(err) {
+    console.error('saveItinToNotion:', err);
+    setSyncStatus(`❌ ${err.message.slice(0,80)}`, 'err');
+  } finally {
+    document.getElementById('loadingOverlay').classList.remove('active');
+    renderDesktopItin();
+    renderMobileItin();
+  }
+}
+
+// ── CHARGER ───────────────────────────────────────────────
+async function loadItinsFromNotion() {
+  setSyncStatus('🔄 Connexion à Notion…', 'busy');
+  document.querySelectorAll('#btnSaveNotion,#btnLoadNotion').forEach(b => b.disabled = true);
+  document.getElementById('loadingOverlay').classList.add('active');
+
+  try {
+    const prompt = `Dans la base Notion "Suivi rucher", cherche toutes les pages où la propriété "Type" (Select) vaut exactement "Itinéraire".
+
+Pour chaque page trouvée, retourne :
+- id : identifiant Notion de la page (string)
+- name : valeur de la propriété titre (Name)
+- loop : valeur de la propriété "Boucle" (Checkbox), true ou false
+- stops : contenu de la propriété "Étapes" (Rich text), parsé comme liste ordonnée. Chaque ligne est "N. Nom du rucher" — retourne un tableau de strings avec uniquement les noms (sans le numéro ni le point).
+
+IMPORTANT : réponds UNIQUEMENT avec ce JSON, sans aucun texte autour :
+{"itineraries":[{"id":"...","name":"...","loop":false,"stops":["Nom1","Nom2"]}]}
+
+Si aucune page trouvée : {"itineraries":[]}`;
+
+    const text = await callAnthropicNotion(prompt,
+      'Tu lis des données depuis Notion. Réponds UNIQUEMENT avec du JSON valide, rien d\'autre.');
+
+    console.log('loadItinsFromNotion raw response:', text);
+    const result = extractJSON(text);
+
+    if (!result.itineraries || !Array.isArray(result.itineraries)) {
+      throw new Error(`Champ "itineraries" manquant. Reçu: ${JSON.stringify(result).slice(0,200)}`);
+    }
+
+    if (result.itineraries.length === 0) {
+      setSyncStatus('ℹ️ Aucune tournée "Itinéraire" trouvée dans Notion', '');
+      setTimeout(() => setSyncStatus(''), 5000);
+      return;
+    }
+
+    let added = 0, updated = 0;
+    result.itineraries.forEach(n => {
+      const stops = (n.stops || []).map(name => ({ name: String(name).trim(), distFromPrev: '' }));
+      const existing = savedItineraries.find(i => i.notionId === n.id);
+      if (existing) {
+        existing.name = n.name; existing.loop = !!n.loop;
+        existing.stops = stops; existing.result = null;
+        updated++;
+      } else {
+        savedItineraries.push({
+          id: Date.now() + Math.random(),
+          notionId: n.id,
+          name: n.name,
+          loop: !!n.loop,
+          stops,
+          result: null
+        });
+        added++;
+      }
+    });
+
+    clearRouteLayer(); refreshMarkerIcons();
+    const msg = [added && `${added} ajoutée(s)`, updated && `${updated} mise(s) à jour`].filter(Boolean).join(', ');
+    setSyncStatus(`✅ ${msg} depuis Notion`, 'ok');
+    setTimeout(() => setSyncStatus(''), 5000);
+
+  } catch(err) {
+    console.error('loadItinsFromNotion:', err);
+    setSyncStatus(`❌ ${err.message.slice(0,100)}`, 'err');
+  } finally {
+    document.getElementById('loadingOverlay').classList.remove('active');
+    renderDesktopItin();
+    renderMobileItin();
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// ROUTE CALCULATION
+// ══════════════════════════════════════════════════════════
+async function calculateRoute(){
+  const itin=getActiveItin();if(!itin||itin.stops.length<2)return;
+  document.getElementById('loadingOverlay').classList.add('active');
+
+  // Récupérer la position GPS si demandée
+  let userPos=null;
+  if(itin.startFromPosition){
+    try{
+      userPos=await new Promise((resolve,reject)=>
+        navigator.geolocation.getCurrentPosition(
+          p=>resolve({lat:p.coords.latitude,lng:p.coords.longitude}),
+          ()=>reject(new Error('Position GPS non disponible')),
+          {timeout:8000,enableHighAccuracy:true}
+        )
+      );
+    }catch(gpsErr){
+      alert('⚠️ Position GPS non disponible. L\'itinéraire partira du premier rucher.');
+    }
+  }
+
+  try{
+    const empList=itin.stops.map(s=>NOTION_DATA.find(e=>e.name===s.name));
+
+    // Coordonnées OSRM : si position GPS, l'ajouter en tête
+    let osrmStops=[...empList];
+    if(itin.loop) osrmStops.push(osrmStops[0]);
+    let coordStr=osrmStops.map(e=>`${e.lng},${e.lat}`).join(';');
+    if(userPos) coordStr=`${userPos.lng},${userPos.lat};`+coordStr;
+
+    const res=await fetch(`https://router.project-osrm.org/route/v1/driving/${coordStr}?overview=full&geometries=geojson`);
+    const data=await res.json();
+    if(data.code!=='Ok')throw new Error('Calcul impossible');
+    const route=data.routes[0];
+
+    // Distances entre étapes (décalées si position GPS ajoutée)
+    const legOffset=userPos?1:0;
+    route.legs.forEach((leg,i)=>{
+      const stopIdx=i-legOffset+1;
+      if(stopIdx>0&&stopIdx<itin.stops.length)
+        itin.stops[stopIdx].distFromPrev=`${(leg.distance/1000).toFixed(1)} km · ${Math.round(leg.duration/60)} min`;
+    });
+
+    // URLs Maps/Waze
+    const pts=empList.map(e=>`${e.lat},${e.lng}`);
+    const originPt=userPos?`${userPos.lat},${userPos.lng}`:pts[0];
+    const destPt=itin.loop?pts[0]:pts[pts.length-1];
+    const viaPts=userPos?pts.slice(0,-1):pts.slice(1,-1);
+
+    const gmapsUrlWeb=`https://www.google.com/maps/dir/?api=1&origin=${originPt}&destination=${destPt}${viaPts.length?`&waypoints=${viaPts.join('|')}`:''}&travelmode=driving`;
+    const gmapsUrl=`comgooglemaps://?saddr=${userPos?originPt:''}${userPos?'':''}${!userPos?`saddr=${originPt}`:`saddr=${originPt}`}&daddr=${destPt}${viaPts.length?`&waypoints=${viaPts.join('|')}`:''}&directionsmode=driving`;
+    // Waze: si position GPS, laisser Waze partir de la position actuelle (saddr vide)
+    const wazeFirst=empList[0];
+    const wazeUrl=userPos
+      ?`https://ul.waze.com/ul?ll=${wazeFirst.lat}%2C${wazeFirst.lng}&navigate=yes&zoom=17`
+      :`https://ul.waze.com/ul?ll=${wazeFirst.lat}%2C${wazeFirst.lng}&navigate=yes&zoom=17`;
+
+    itin.result={
+      distStr:route.distance>=1000?`${(route.distance/1000).toFixed(1)} km`:`${Math.round(route.distance)} m`,
+      timeStr:fmtDur(route.duration),
+      geometry:route.geometry,
+      gmapsUrl,gmapsUrlWeb,wazeUrl,
+      startedFromGPS:!!userPos,
+      userPos
+    };
+    drawRoute(route.geometry);
+    renderDesktopItin();renderMobileItin();
+  }catch(e){alert('❌ Erreur de calcul. Vérifiez votre connexion.');}
+  finally{document.getElementById('loadingOverlay').classList.remove('active');}
+}
+
+// ── Native app deep link helper ───────────────────────────
+function openNativeApp(e, deepUrl, fallbackUrl) {
+  e.preventDefault();
+  const isMob = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  if (!isMob) { window.open(fallbackUrl, '_blank'); return; }
+  // Try to open the native app; fall back to web after 1.5s if not installed
+  let fallbackTimer = setTimeout(() => { window.location.href = fallbackUrl; }, 1500);
+  window.location.href = deepUrl;
+  window.addEventListener('blur', () => clearTimeout(fallbackTimer), { once: true });
+}
+
+function fmtDur(s){const h=Math.floor(s/3600),m=Math.round((s%3600)/60);return h>0?`${h}h ${m}min`:`${m} min`;}
+function clearRouteLayer(){if(routeLayer){map.removeLayer(routeLayer);routeLayer=null;}}
+function drawRoute(geometry){
+  clearRouteLayer();
+  const geo=geometry||getActiveItin()?.result?.geometry;if(!geo)return;
+  routeLayer=L.geoJSON(geo,{style:{color:'#a78bfa',weight:5,opacity:.88,dashArray:'10,5'}}).addTo(map);
+  map.fitBounds(routeLayer.getBounds(),{padding:[50,50]});
+}
+
+// ══════════════════════════════════════════════════════════
+// NOTION REFRESH
+// ══════════════════════════════════════════════════════════
+async function loadData(){
+  const btn=document.getElementById('refreshBtn'),overlay=document.getElementById('loadingOverlay');
+  btn.textContent='⏳';overlay.classList.add('active');
+  try{
+    const res=await fetch("https://api.anthropic.com/v1/messages",{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        model:"claude-sonnet-4-20250514",max_tokens:2000,
+        system:`Réponds UNIQUEMENT avec un tableau JSON valide, sans texte ni markdown. Format: [{"name":"...","addr":"...","lat":0.0,"lng":0.0,"culture":"...","url":"..."}]`,
+        messages:[{role:"user",content:"Récupère tous les emplacements avec GPS de la base Notion 'Suivi rucher'. Pour chaque emplacement avec coordonnées GPS (champs latitude/Longitude ou place:GPS): nom (Emplacement), adresse, latitude, longitude, culture (nom de la culture liée), URL Notion. Retourne UNIQUEMENT le JSON."}],
+        mcp_servers:[{type:"url",url:"https://mcp.notion.com/mcp",name:"notion"}]
+      })
+    });
+    if(res.ok){
+      const data=await res.json();
+      const text=data.content?.filter(b=>b.type==='text').map(b=>b.text).join('')||'';
+      const parsed=JSON.parse(text.replace(/```json|```/g,'').trim());
+      if(Array.isArray(parsed)&&parsed.length>0){
+        NOTION_DATA.forEach(e=>{if(e._marker)map.removeLayer(e._marker);});
+        NOTION_DATA.length=0;parsed.forEach(i=>{i._marker=null;NOTION_DATA.push(i);});
+        renderMarkers();renderSidebar();
+      }
+    }
+  }catch(e){console.error(e);}
+  finally{btn.textContent='🔄';overlay.classList.remove('active');}
+}
+
+// ══════════════════════════════════════════════════════════
+// IOS INSTALL
+// ══════════════════════════════════════════════════════════
+function isIos(){ return /iphone|ipad|ipod/i.test(navigator.userAgent); }
+function isInStandaloneMode(){ return window.navigator.standalone===true; }
+
+function openModal(){ document.getElementById('iosModal').classList.add('open'); dismissBanner(); }
+function closeModal(){ document.getElementById('iosModal').classList.remove('open'); }
+function dismissBanner(){
+  document.getElementById('iosBanner').classList.remove('visible');
+  localStorage.setItem('iosBannerDismissed','1');
+}
+
+function checkIosBanner(){
+  if(isIos() && !isInStandaloneMode()){
+    // Affiche le bouton install dans le header
+    const btn=document.getElementById('installBtn');
+    if(btn) btn.style.display='block';
+    // Affiche le banner si pas encore dismissé
+    if(!localStorage.getItem('iosBannerDismissed')){
+      setTimeout(()=>{ document.getElementById('iosBanner').classList.add('visible'); },1500);
+    }
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// BOOT
+// ══════════════════════════════════════════════════════════
+window.addEventListener('load',()=>{
+  initMap();
+  renderMarkers();
+  renderSidebar();
+  renderDesktopItin();
+  // Mobile : ouvrir sheet au départ
+  if(isMobile()){
+    setTimeout(()=>{openSheet();},400);
+  }
+  // iOS install banner
+  checkIosBanner();
+  // Resize
+  window.addEventListener('resize',()=>map.invalidateSize());
+});
+</script>
+</body>
+</html>
