@@ -4,6 +4,15 @@ from datetime import datetime, timezone
 NOTION_TOKEN = os.environ["NOTION_TOKEN"]
 NOTION_DB_ID  = os.environ["NOTION_DB_ID"]
 
+# Nettoyer l'ID : enlever tirets et espaces, puis reformater
+clean_id = NOTION_DB_ID.replace("-", "").replace(" ", "").strip()
+# Reformater avec tirets si besoin
+if len(clean_id) == 32:
+    NOTION_DB_ID = f"{clean_id[0:8]}-{clean_id[8:12]}-{clean_id[12:16]}-{clean_id[16:20]}-{clean_id[20:32]}"
+
+print(f"Token (premiers caractères) : {NOTION_TOKEN[:12]}...")
+print(f"DB ID utilisé : {NOTION_DB_ID}")
+
 HEADERS = {
     "Authorization": f"Bearer {NOTION_TOKEN}",
     "Notion-Version": "2022-06-28",
@@ -12,13 +21,17 @@ HEADERS = {
 
 def fetch_all_pages():
     url = f"https://api.notion.com/v1/databases/{NOTION_DB_ID}/query"
+    print(f"Appel URL : {url}")
     pages, cursor = [], None
     while True:
         body = {"page_size": 100}
         if cursor:
             body["start_cursor"] = cursor
         r = requests.post(url, headers=HEADERS, json=body)
-        r.raise_for_status()
+        # Afficher le détail de l'erreur si problème
+        if not r.ok:
+            print(f"ERREUR {r.status_code} : {r.text}")
+            r.raise_for_status()
         data = r.json()
         pages.extend(data["results"])
         if not data.get("has_more"):
